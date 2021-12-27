@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>My first three.js app</title>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stats"></div>
+  </body>
+</html>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r16/Stats.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/17.2.0/Tween.min.js"></script>
+<script type="module">
+  import * as THREE from 'https://cdn.skypack.dev/three@0.135.0'
+  import { OrbitControls } from 'https://cdn.skypack.dev/three@0.135.0/examples/jsm/controls/OrbitControls.js'
+  import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.135.0/examples/jsm/loaders/GLTFLoader.js'
+  import { Lensflare, LensflareElement } from 'https://cdn.skypack.dev/three@0.135.0/examples/jsm/objects/Lensflare.js'
+
+  let scene, renderer, camera
+  let cameraControl, stats
+  let sphereLightMesh, pointLight
+  let mixers = []
+  let creeperObj
+  let tween, tweenBack
+  let time
+  let rotateAngle = 0
+  let invert = 1
+  let modelMesh
+  let keysPressed = {}
+
+  class Creeper {
+    constructor() {
+      // 宣告頭、身體、腳幾何體大小
+      const headGeo = new THREE.BoxGeometry(4, 4, 4)
+      const bodyGeo = new THREE.BoxGeometry(4, 8, 2)
+      const footGeo = new THREE.BoxGeometry(2, 3, 2)
+
+      // 苦力怕臉部貼圖
+      const headMap = new THREE.TextureLoader().load('../assets/img/creeper_face.png')
+      // 苦力怕皮膚貼圖
+      const skinMap = new THREE.TextureLoader().load('../assets/img/creeper.png')
+
+      // 身體與腳的材質設定
+      const skinMat = new THREE.MeshPhongMaterial({
+        map: skinMap, // 皮膚貼圖
+      })
+
+      // 準備頭部與臉的材質
+      const headMaterials = []
+      for (let i = 0; i < 6; i++) {
+        let map
+
+        if (i === 4) map = headMap
+        else map = skinMap
+
+        headMaterials.push(new THREE.MeshPhongMaterial({ map: map }))
+      }
+
+      // 頭
+      this.head = new THREE.Mesh(headGeo, headMaterials)
+      this.head.position.set(0, 6, 0)
+      this.head.rotation.y = 0.5 // 稍微的擺頭
+
+      // 身體
+      this.body = new THREE.Mesh(bodyGeo, skinMat)
+      this.body.position.set(0, 0, 0)
+
+      // 四隻腳
+      this.foot1 = new THREE.Mesh(footGeo, skinMat)
+      this.foot1.position.set(-1, -5.5, 2)
+      this.foot2 = this.foot1.clone() // 剩下三隻腳都複製第一隻的 Mesh
+      this.foot2.position.set(-1, -5.5, -2)
+      this.foot3 = this.foot1.clone()
+      this.foot3.position.set(1, -5.5, 2)
+      this.foot4 = this.foot1.clone()
+      this.foot4.position.set(1, -5.5, -2)
+
+      // 將四隻腳組合為一個 group
+      this.feet = new THREE.Group()
+      this.feet.add(this.foot1)
+      this.feet.add(this.foot2)
+      this.feet.add(this.foot3)
+      this.feet.add(this.foot4)
+
+      // 將頭、身體、腳組合為一個 group
+      this.creeper = new THREE.Group()
+      this.creeper.add(this.head)
+      this.creeper.add(this.body)
+      this.creeper.add(this.feet)
+
+      // 苦力怕投影設定，利用 traverse 遍歷各個子元件設定陰影
+      this.creeper.traverse(function (object) {
+        if (object instanceof THREE.Mesh) {
+          object.castShadow = true
+          object.receiveShadow = true
+        }
+      })
+    }
+  }
+
+  //  太陽與眩光
+  function addSun() {
+    var spotLight = new THREE.SpotLight(0xffffff)
+    spotLight.position.set(10, 20, 10)
+    scene.add(spotLight)
+    var textureFlare2 = new THREE.TextureLoader().load('./20200630103311828.png')
+    var textureFlare0 = new THREE.TextureLoader().load('./20200630103304387.png')
+    var lensFlare = new Lensflare()
+    lensFlare.addElement(new LensflareElement(textureFlare0, 100, 0.0, new THREE.Color(0xffffff)))
+    lensFlare.addElement(new LensflareElement(textureFlare2, 60, 0.6, new THREE.Color(0xffff00)))
+    lensFlare.addElement(new LensflareElement(textureFlare2, 70, 0.7, new THREE.Color(0x00ffff)))
+    lensFlare.addElement(new LensflareElement(textureFlare2, 120, 0.9, new THREE.Color(0x00ff00)))
+    lensFlare.addElement(new LensflareElement(textureFlare2, 70, 1.0, new THREE.Color(0x0000ff)))
+    lensFlare.position.copy(spotLight.position)
+    scene.add(lensFlare)
+  }
+
+  // 生成苦力怕並加到場景
+  function createCreeper() {
+    creeperObj = new Creeper()
+    scene.add(creeperObj.creeper)
+  }
+
+  function initStats() {
+    const stats = new Stats()
+    stats.setMode(0)
+    document.getElementById('stats').appendChild(stats.domElement)
+    return stats
+  }
+
+  const clock = new THREE.Clock()
+  const raycaster = new THREE.Raycaster()
+  const targetQuaternion = new THREE.Quaternion()
+
+  function init() {
+    scene = new THREE.Scene()
+
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000)
+    camera.position.set(-15, 15, 0) // 相機位置
+
+    let axes = new THREE.AxesHelper(20)
+    // scene.add(axes)
+
+    stats = initStats()
+
+    renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    renderer.shadowMap.enabled = true
+    renderer.setClearColor(0x111111)
+    renderer.shadowMap.type = 2 // THREE.PCFSoftShadowMap
+
+    cameraControl = new OrbitControls(camera, renderer.domElement)
+    cameraControl.enableDamping = true // 啟用阻尼效果
+    cameraControl.dampingFactor = 0.25 // 阻尼系數
+    cameraControl.target = new THREE.Vector3(0, 10, 0) // 相機焦點lookAt再有OrbitControls時無效
+
+    // 簡單的地板
+    const planeGeometry = new THREE.PlaneGeometry(1000, 1000)
+    const planeMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff })
+    let plane = new THREE.Mesh(planeGeometry, planeMaterial)
+    plane.rotation.x = -0.5 * Math.PI
+    plane.position.set(0, 0, 0)
+    plane.receiveShadow = true
+    scene.add(plane)
+
+    const loader = new GLTFLoader()
+
+    loader.load(
+      './models/phoenix/scene.gltf',
+      function (gltf) {
+        scene.add(gltf.scene) // 將模型引入three
+        gltf.scene.scale.set(0.01, 0.01, 0.01)
+        gltf.scene.position.set(0, 5, 0)
+        gltf.scene.traverse(function (node) {
+          if (node.isMesh) {
+            node.castShadow = true
+            node.receiveShadow = true
+          }
+        })
+        modelMesh = gltf.scene
+
+        // 調用動畫
+        const mixer = new THREE.AnimationMixer(gltf.scene)
+        mixer.clipAction(gltf.animations[0]).play()
+        mixers.push(mixer)
+      },
+      undefined,
+      function (error) {
+        console.error(error)
+      }
+    )
+
+    const loader2 = new GLTFLoader()
+
+    loader2.load(
+      './models/dogs/scene.gltf',
+      function (gltf) {
+        // const axesHelper = new THREE.AxesHelper(5)
+        // scene.add(axesHelper)
+        gltf.scene.position.set(0, 0, 0)
+        gltf.scene.traverse(function (node) {
+          if (node.isMesh) {
+            node.castShadow = true
+            node.receiveShadow = true
+          }
+        })
+        scene.add(gltf.scene) // 將模型引入three
+
+        // 調用動畫
+        const mixer = new THREE.AnimationMixer(gltf.scene)
+        mixer.clipAction(gltf.animations[0]).play()
+        mixers.push(mixer)
+      },
+      undefined,
+      function (error) {
+        console.error(error)
+      }
+    )
+
+    // createCreeper()
+
+    // addSun()
+
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keyup', onKeyUp)
+
+    // 設置環境光提供輔助柔和白光
+    let ambientLight = new THREE.AmbientLight(0x404040)
+    scene.add(ambientLight)
+
+    // 設置聚光燈幫忙照亮物體
+    let spotLight = new THREE.SpotLight(0xf0f0f0)
+    spotLight.castShadow = true
+    spotLight.position.set(-10, 20, -10)
+    scene.add(spotLight)
+
+    // 將渲染器的 DOM 綁到網頁上
+    document.body.appendChild(renderer.domElement)
+  }
+
+  //  控制移動
+  function moveHandler() {
+    let movement
+
+    if (keysPressed['w']) {
+      if (keysPressed['a']) {
+        //  左前
+        movement = {
+          x: modelMesh.position.x + 5,
+          z: modelMesh.position.z - 5,
+        }
+      } else if (keysPressed['d']) {
+        //  右前
+        movement = {
+          x: modelMesh.position.x + 5,
+          z: modelMesh.position.z + 5,
+        }
+      } else {
+        //  前
+        movement = {
+          x: modelMesh.position.x + 5,
+        }
+      }
+    }
+    if (keysPressed['s']) {
+      if (keysPressed['a']) {
+        //  左後
+        movement = {
+          x: modelMesh.position.x - 5,
+          z: modelMesh.position.z - 5,
+        }
+      } else if (keysPressed['d']) {
+        //  右後
+        movement = {
+          x: modelMesh.position.x - 5,
+          z: modelMesh.position.z + 5,
+        }
+      } else {
+        // 後
+        movement = {
+          x: modelMesh.position.x - 5,
+        }
+      }
+    }
+    if (keysPressed['a']) {
+      if (keysPressed['w']) {
+        //  左前
+        movement = {
+          x: modelMesh.position.x + 5,
+          z: modelMesh.position.z - 5,
+        }
+      } else if (keysPressed['s']) {
+        // 左後
+        movement = {
+          x: modelMesh.position.x - 5,
+          z: modelMesh.position.z - 5,
+        }
+      } else {
+        // 左
+        movement = {
+          z: modelMesh.position.z - 5,
+        }
+      }
+    }
+    if (keysPressed['d']) {
+      if (keysPressed['w']) {
+        // 右前
+        movement = {
+          x: modelMesh.position.x + 5,
+          z: modelMesh.position.z + 5,
+        }
+      } else if (keysPressed['s']) {
+        // 右後
+        movement = {
+          x: modelMesh.position.x - 5,
+          z: modelMesh.position.z + 5,
+        }
+      } else {
+        // 右
+        movement = {
+          z: modelMesh.position.z + 5,
+        }
+      }
+    }
+
+    TWEEN.removeAll()
+    new TWEEN.Tween(modelMesh.position)
+      .to(movement, 600) //walks 2 meters a second * the distance
+      .onUpdate(() => {
+        camera.position.set(modelMesh.position.x - 15, modelMesh.position.y + 5, modelMesh.position.z)
+        cameraControl.target.set(modelMesh.position.x, modelMesh.position.y + 1, modelMesh.position.z)
+      })
+      .start()
+  }
+
+  //  鬆開按鍵
+  function onKeyUp(event) {
+    delete keysPressed[event.key]
+    moveHandler()
+  }
+
+  //  按下按鍵
+  function onKeyDown(event) {
+    keysPressed[event.key] = true
+    moveHandler()
+  }
+
+  // 點光源繞 Y 軸旋轉動畫
+  function pointLightAnimation() {
+    if (rotateAngle > 2 * Math.PI) {
+      rotateAngle = 0 // 超過 360 度後歸零
+    } else {
+      rotateAngle += 0.03 // 遞增角度
+    }
+
+    // 光源延橢圓軌道繞 Y 軸旋轉
+    sphereLightMesh.position.x = 8 * Math.cos(rotateAngle)
+    sphereLightMesh.position.z = 4 * Math.sin(rotateAngle)
+
+    // 點光源位置與球體同步
+    pointLight.position.copy(sphereLightMesh.position)
+  }
+
+  function animations() {
+    var delta = clock.getDelta()
+    for (var i = 0; i < mixers.length; i++) {
+      // 重復播放動畫
+      mixers[i].update(delta)
+    }
+  }
+
+  function render() {
+    cameraControl.update() // 需設定 update
+    animations()
+    TWEEN.update()
+    requestAnimationFrame(render)
+
+    renderer.render(scene, camera)
+    stats.update()
+  }
+
+  // 監聽螢幕寬高變化來做簡單 RWD 設定
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight
+    camera.updateProjectionMatrix()
+    renderer.setSize(window.innerWidth, window.innerHeight)
+  })
+
+  init()
+
+  render()
+</script>
+<style>
+  #info {
+    position: absolute;
+    top: 10px;
+    width: 100%;
+    text-align: center;
+    z-index: 100;
+    display: block;
+  }
+</style>
