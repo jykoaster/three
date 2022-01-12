@@ -16,6 +16,7 @@
 </html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r16/Stats.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/17.2.0/Tween.min.js"></script>
+<script src="./handler.js"></script>
 <script type="module">
   import * as THREE from 'https://cdn.skypack.dev/three@0.135.0'
   import { OrbitControls } from 'https://cdn.skypack.dev/three@0.135.0/examples/jsm/controls/OrbitControls.js'
@@ -24,15 +25,16 @@
 
   let scene, renderer, camera
   let cameraControl, stats
-  let sphereLightMesh, pointLight
   let mixers = []
   let creeperObj
   let tween, tweenBack
-  let time
-  let rotateAngle = 0
-  let invert = 1
   let modelMesh
   let keysPressed = {}
+  let bullets = []
+  const cameraRange = 10 //  模型與相機之間前後的距離
+  const cameraHeight = 5 //  模型與相機之間的高度
+  const speed = 5 //  移動速度
+  const rotateSpeed = 0.05 //  旋轉速度
 
   class Creeper {
     constructor() {
@@ -119,8 +121,6 @@
     spotLight.shadow.mapSize.height = 1024
 
     //  光源輔助器
-    // var shadowHelper = new THREE.CameraHelper(spotLight.shadow.camera)
-    // scene.add(shadowHelper)
     spotLight.shadow.camera.near = 0.1
     spotLight.shadow.camera.far = 100000
     spotLight.shadow.camera.fov = 90
@@ -154,10 +154,9 @@
         camera.position.set(-15, 105, 0) // 相機位置
         scene.add(camera)
         gltf.scene.scale.set(0.01, 0.01, 0.01)
-        gltf.scene.position.set(camera.position.x + 10, camera.position.y - 5, camera.position.z)
+        gltf.scene.position.set(camera.position.x + cameraRange, camera.position.y - cameraHeight, camera.position.z)
         gltf.scene.rotation.copy(camera.rotation)
         scene.add(gltf.scene) // 將模型引入three
-        cameraControl.target.set(gltf.scene.position.x, gltf.scene.position.y + 3, gltf.scene.position.z)
         gltf.scene.traverse(function (node) {
           if (node.isMesh) {
             node.castShadow = true
@@ -258,7 +257,6 @@
 
     createSkybox()
     createPhoenix()
-
     createPoints()
     addLight()
 
@@ -275,75 +273,21 @@
   }
 
   function attack() {
-    console.log(123)
-    const geometry = new THREE.BoxGeometry(2, 2, 2)
+    const geometry = new THREE.BoxGeometry(1, 1, 1)
     const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
     const cube = new THREE.Mesh(geometry, material)
-    scene.add(cube)
     cube.position.copy(modelMesh.position)
-    new TWEEN.Tween(cube.position)
+    cube.rotation.copy(modelMesh.rotation)
+    scene.add(cube)
+    bullets.push(cube)
   }
 
   //  控制移動
-  function moveHandler() {
-    let movement
-    const speed = 50
-    const rotateSpeed = 0.05
-
+  function mainHandler() {
     TWEEN.removeAll()
-
-    if (JSON.stringify(keysPressed) !== '{}') {
-      new TWEEN.Tween(scene)
-        .to(movement, 600) //walks 2 meters a second * the distance
-        .onUpdate(() => {
-          let matrix
-          const direction = new THREE.Vector3()
-          const direction2 = new THREE.Vector3()
-
-          const calRotate = (radiu) => {
-            modelMesh.rotateY(radiu)
-            const thetaX = Math.acos((camera.position.x - modelMesh.position.x) / 10)
-            const thetaZ = Math.asin((camera.position.z - modelMesh.position.z) / 10)
-            let theta = thetaX
-            if (thetaZ > 0) {
-              theta = 2 * Math.PI - thetaX
-            }
-            camera.position.set(
-              modelMesh.position.x + 10 * Math.cos(theta + radiu),
-              modelMesh.position.y + 5,
-              modelMesh.position.z - 10 * Math.sin(theta + radiu)
-            )
-          }
-
-          if (keysPressed['w']) {
-            camera.getWorldDirection(direction)
-            camera.position.addScaledVector({ x: direction.x, y: 0, z: direction.z }, speed)
-            modelMesh.position.copy(camera.position)
-            modelMesh.updateMatrix()
-            modelMesh.translateX(10)
-            modelMesh.translateY(-5)
-          }
-
-          if (keysPressed['s']) {
-            camera.getWorldDirection(direction)
-            camera.position.addScaledVector({ x: direction.x, y: 0, z: direction.z }, speed * -1)
-            modelMesh.position.copy(camera.position)
-            modelMesh.updateMatrix()
-            modelMesh.translateX(10)
-            modelMesh.translateY(-5)
-          }
-
-          if (keysPressed['a']) {
-            calRotate(rotateSpeed)
-          }
-
-          if (keysPressed['d']) {
-            calRotate(rotateSpeed * -1)
-          }
-          cameraControl.target.set(modelMesh.position.x, modelMesh.position.y + 3, modelMesh.position.z)
-        })
-        .start()
-    }
+    bulletHandler(bullets)
+    cameraHandler(cameraControl, modelMesh)
+    moveHandler(THREE, scene, modelMesh, camera, keysPressed, cameraHeight, cameraRange, speed, rotateSpeed)
   }
 
   //  鬆開按鍵
@@ -375,11 +319,9 @@
     cameraControl.update() // 需設定 update
 
     animations()
-
     TWEEN.update()
     requestAnimationFrame(render)
-
-    moveHandler()
+    mainHandler()
     renderer.render(scene, camera)
     stats.update()
   }
