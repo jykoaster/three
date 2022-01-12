@@ -11,6 +11,7 @@
   </head>
   <body>
     <div id="stats"></div>
+    <div id="main"></div>
   </body>
 </html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stats.js/r16/Stats.min.js"></script>
@@ -103,27 +104,126 @@
     }
   }
 
-  //  太陽與眩光
-  function addSun() {
-    var spotLight = new THREE.SpotLight(0xffffff)
-    spotLight.position.set(10, 20, 10)
+  //  添加光線
+  function addLight() {
+    // 設置環境光提供輔助柔和白光
+    const ambientLight = new THREE.AmbientLight(0x404040)
+    scene.add(ambientLight)
+
+    const spotLight = new THREE.PointLight(0xffffff, 2)
+    spotLight.position.set(0, 600, 0)
+
+    spotLight.castShadow = true
+
+    spotLight.shadow.mapSize.width = 1024
+    spotLight.shadow.mapSize.height = 1024
+
+    //  光源輔助器
+    // var shadowHelper = new THREE.CameraHelper(spotLight.shadow.camera)
+    // scene.add(shadowHelper)
+    spotLight.shadow.camera.near = 0.1
+    spotLight.shadow.camera.far = 100000
+    spotLight.shadow.camera.fov = 90
+
     scene.add(spotLight)
+
     var textureFlare2 = new THREE.TextureLoader().load('./20200630103311828.png')
     var textureFlare0 = new THREE.TextureLoader().load('./20200630103304387.png')
     var lensFlare = new Lensflare()
-    lensFlare.addElement(new LensflareElement(textureFlare0, 100, 0.0, new THREE.Color(0xffffff)))
+    lensFlare.addElement(new LensflareElement(textureFlare0, 1000, 0.0, new THREE.Color(0xffffff)))
     lensFlare.addElement(new LensflareElement(textureFlare2, 60, 0.6, new THREE.Color(0xffff00)))
     lensFlare.addElement(new LensflareElement(textureFlare2, 70, 0.7, new THREE.Color(0x00ffff)))
     lensFlare.addElement(new LensflareElement(textureFlare2, 120, 0.9, new THREE.Color(0x00ff00)))
     lensFlare.addElement(new LensflareElement(textureFlare2, 70, 1.0, new THREE.Color(0x0000ff)))
     lensFlare.position.copy(spotLight.position)
-    scene.add(lensFlare)
+    // scene.add(lensFlare)
   }
 
   // 生成苦力怕並加到場景
   function createCreeper() {
     creeperObj = new Creeper()
     scene.add(creeperObj.creeper)
+  }
+
+  //  生成鳳凰
+  function createPhoenix() {
+    const loader = new GLTFLoader()
+    loader.load(
+      './models/phoenix/scene.gltf',
+      function (gltf) {
+        camera.position.set(-15, 105, 0) // 相機位置
+        scene.add(camera)
+        gltf.scene.scale.set(0.01, 0.01, 0.01)
+        gltf.scene.position.set(camera.position.x + 10, camera.position.y - 5, camera.position.z)
+        gltf.scene.rotation.copy(camera.rotation)
+        scene.add(gltf.scene) // 將模型引入three
+        cameraControl.target.set(gltf.scene.position.x, gltf.scene.position.y + 3, gltf.scene.position.z)
+        gltf.scene.traverse(function (node) {
+          if (node.isMesh) {
+            node.castShadow = true
+            node.receiveShadow = true
+          }
+        })
+        modelMesh = gltf.scene
+        // 調用動畫
+        const mixer = new THREE.AnimationMixer(gltf.scene)
+        mixer.clipAction(gltf.animations[0]).play()
+        mixers.push(mixer)
+      },
+      undefined,
+      function (error) {
+        console.error(error)
+      }
+    )
+  }
+
+  // 建立粒子系統(雪花)
+  function createPoints() {
+    const texture = new THREE.TextureLoader().load('./20107572piCtGLYX4z.png')
+    const material = new THREE.PointsMaterial({
+      size: 50,
+      map: texture,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.7,
+    })
+
+    let vertices = []
+    for (let i = 0; i < 100000; i++) {
+      const x = THREE.Math.randInt(-50000, 50000)
+      const y = THREE.Math.randInt(-50000, 50000)
+      const z = THREE.Math.randInt(-50000, 50000)
+
+      const point = new THREE.Vector3(x, y, z)
+      vertices.push(point)
+    }
+    const geometry = new THREE.BufferGeometry().setFromPoints(vertices)
+    const points = new THREE.Points(geometry, material)
+    scene.add(points)
+  }
+
+  //  創建天空場景
+  function createSkybox() {
+    let materialArray = []
+    let texture_ft = new THREE.TextureLoader().load('./penguins/yonder_ft.jpg')
+    let texture_bk = new THREE.TextureLoader().load('./penguins/yonder_bk.jpg')
+    let texture_up = new THREE.TextureLoader().load('./penguins/yonder_up.jpg')
+    let texture_dn = new THREE.TextureLoader().load('./penguins/yonder_dn.jpg')
+    let texture_rt = new THREE.TextureLoader().load('./penguins/yonder_rt.jpg')
+    let texture_lf = new THREE.TextureLoader().load('./penguins/yonder_lf.jpg')
+
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_ft }))
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_bk }))
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_up }))
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_dn }))
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_rt }))
+    materialArray.push(new THREE.MeshBasicMaterial({ map: texture_lf }))
+
+    for (let i = 0; i < 6; i++) materialArray[i].side = THREE.BackSide
+    let skyboxGeo = new THREE.BoxGeometry(100000, 100000, 100000)
+    let skybox = new THREE.Mesh(skyboxGeo, materialArray)
+    scene.add(skybox)
   }
 
   function initStats() {
@@ -134,21 +234,19 @@
   }
 
   const clock = new THREE.Clock()
-  const raycaster = new THREE.Raycaster()
-  const targetQuaternion = new THREE.Quaternion()
 
   function init() {
     scene = new THREE.Scene()
 
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000)
-    camera.position.set(-15, 15, 0) // 相機位置
+    camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 100000)
+    // camera.position.set(-15, 105, 0) // 相機位置
 
     let axes = new THREE.AxesHelper(20)
-    // scene.add(axes)
+    scene.add(axes)
 
     stats = initStats()
 
-    renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.shadowMap.enabled = true
     renderer.setClearColor(0x111111)
@@ -157,213 +255,112 @@
     cameraControl = new OrbitControls(camera, renderer.domElement)
     cameraControl.enableDamping = true // 啟用阻尼效果
     cameraControl.dampingFactor = 0.25 // 阻尼系數
-    cameraControl.target = new THREE.Vector3(0, 10, 0) // 相機焦點lookAt再有OrbitControls時無效
 
-    // 簡單的地板
-    const planeGeometry = new THREE.PlaneGeometry(1000, 1000)
-    const planeMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff })
-    let plane = new THREE.Mesh(planeGeometry, planeMaterial)
-    plane.rotation.x = -0.5 * Math.PI
-    plane.position.set(0, 0, 0)
-    plane.receiveShadow = true
-    scene.add(plane)
+    createSkybox()
+    createPhoenix()
 
-    const loader = new GLTFLoader()
-
-    loader.load(
-      './models/phoenix/scene.gltf',
-      function (gltf) {
-        scene.add(gltf.scene) // 將模型引入three
-        gltf.scene.scale.set(0.01, 0.01, 0.01)
-        gltf.scene.position.set(0, 5, 0)
-        gltf.scene.traverse(function (node) {
-          if (node.isMesh) {
-            node.castShadow = true
-            node.receiveShadow = true
-          }
-        })
-        modelMesh = gltf.scene
-
-        // 調用動畫
-        const mixer = new THREE.AnimationMixer(gltf.scene)
-        mixer.clipAction(gltf.animations[0]).play()
-        mixers.push(mixer)
-      },
-      undefined,
-      function (error) {
-        console.error(error)
-      }
-    )
-
-    const loader2 = new GLTFLoader()
-
-    loader2.load(
-      './models/dogs/scene.gltf',
-      function (gltf) {
-        // const axesHelper = new THREE.AxesHelper(5)
-        // scene.add(axesHelper)
-        gltf.scene.position.set(0, 0, 0)
-        gltf.scene.traverse(function (node) {
-          if (node.isMesh) {
-            node.castShadow = true
-            node.receiveShadow = true
-          }
-        })
-        scene.add(gltf.scene) // 將模型引入three
-
-        // 調用動畫
-        const mixer = new THREE.AnimationMixer(gltf.scene)
-        mixer.clipAction(gltf.animations[0]).play()
-        mixers.push(mixer)
-      },
-      undefined,
-      function (error) {
-        console.error(error)
-      }
-    )
+    createPoints()
+    addLight()
 
     // createCreeper()
 
-    // addSun()
+    //  監聽鍵盤事件
 
-    document.addEventListener('keydown', onKeyDown)
     document.addEventListener('keyup', onKeyUp)
-
-    // 設置環境光提供輔助柔和白光
-    let ambientLight = new THREE.AmbientLight(0x404040)
-    scene.add(ambientLight)
-
-    // 設置聚光燈幫忙照亮物體
-    let spotLight = new THREE.SpotLight(0xf0f0f0)
-    spotLight.castShadow = true
-    spotLight.position.set(-10, 20, -10)
-    scene.add(spotLight)
+    document.addEventListener('keypress', onKeyPress)
+    document.addEventListener('keydown', onKeyDown)
 
     // 將渲染器的 DOM 綁到網頁上
-    document.body.appendChild(renderer.domElement)
+    document.getElementById('main').appendChild(renderer.domElement)
+  }
+
+  function attack() {
+    console.log(123)
+    const geometry = new THREE.BoxGeometry(2, 2, 2)
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+    const cube = new THREE.Mesh(geometry, material)
+    scene.add(cube)
+    cube.position.copy(modelMesh.position)
+    new TWEEN.Tween(cube.position)
   }
 
   //  控制移動
   function moveHandler() {
     let movement
-
-    if (keysPressed['w']) {
-      if (keysPressed['a']) {
-        //  左前
-        movement = {
-          x: modelMesh.position.x + 5,
-          z: modelMesh.position.z - 5,
-        }
-      } else if (keysPressed['d']) {
-        //  右前
-        movement = {
-          x: modelMesh.position.x + 5,
-          z: modelMesh.position.z + 5,
-        }
-      } else {
-        //  前
-        movement = {
-          x: modelMesh.position.x + 5,
-        }
-      }
-    }
-    if (keysPressed['s']) {
-      if (keysPressed['a']) {
-        //  左後
-        movement = {
-          x: modelMesh.position.x - 5,
-          z: modelMesh.position.z - 5,
-        }
-      } else if (keysPressed['d']) {
-        //  右後
-        movement = {
-          x: modelMesh.position.x - 5,
-          z: modelMesh.position.z + 5,
-        }
-      } else {
-        // 後
-        movement = {
-          x: modelMesh.position.x - 5,
-        }
-      }
-    }
-    if (keysPressed['a']) {
-      if (keysPressed['w']) {
-        //  左前
-        movement = {
-          x: modelMesh.position.x + 5,
-          z: modelMesh.position.z - 5,
-        }
-      } else if (keysPressed['s']) {
-        // 左後
-        movement = {
-          x: modelMesh.position.x - 5,
-          z: modelMesh.position.z - 5,
-        }
-      } else {
-        // 左
-        movement = {
-          z: modelMesh.position.z - 5,
-        }
-      }
-    }
-    if (keysPressed['d']) {
-      if (keysPressed['w']) {
-        // 右前
-        movement = {
-          x: modelMesh.position.x + 5,
-          z: modelMesh.position.z + 5,
-        }
-      } else if (keysPressed['s']) {
-        // 右後
-        movement = {
-          x: modelMesh.position.x - 5,
-          z: modelMesh.position.z + 5,
-        }
-      } else {
-        // 右
-        movement = {
-          z: modelMesh.position.z + 5,
-        }
-      }
-    }
+    const speed = 50
+    const rotateSpeed = 0.05
 
     TWEEN.removeAll()
-    new TWEEN.Tween(modelMesh.position)
-      .to(movement, 600) //walks 2 meters a second * the distance
-      .onUpdate(() => {
-        camera.position.set(modelMesh.position.x - 15, modelMesh.position.y + 5, modelMesh.position.z)
-        cameraControl.target.set(modelMesh.position.x, modelMesh.position.y + 1, modelMesh.position.z)
-      })
-      .start()
+
+    if (JSON.stringify(keysPressed) !== '{}') {
+      new TWEEN.Tween(scene)
+        .to(movement, 600) //walks 2 meters a second * the distance
+        .onUpdate(() => {
+          let matrix
+          const direction = new THREE.Vector3()
+          const direction2 = new THREE.Vector3()
+
+          const calRotate = (radiu) => {
+            modelMesh.rotateY(radiu)
+            const thetaX = Math.acos((camera.position.x - modelMesh.position.x) / 10)
+            const thetaZ = Math.asin((camera.position.z - modelMesh.position.z) / 10)
+            let theta = thetaX
+            if (thetaZ > 0) {
+              theta = 2 * Math.PI - thetaX
+            }
+            camera.position.set(
+              modelMesh.position.x + 10 * Math.cos(theta + radiu),
+              modelMesh.position.y + 5,
+              modelMesh.position.z - 10 * Math.sin(theta + radiu)
+            )
+          }
+
+          if (keysPressed['w']) {
+            camera.getWorldDirection(direction)
+            camera.position.addScaledVector({ x: direction.x, y: 0, z: direction.z }, speed)
+            modelMesh.position.copy(camera.position)
+            modelMesh.updateMatrix()
+            modelMesh.translateX(10)
+            modelMesh.translateY(-5)
+          }
+
+          if (keysPressed['s']) {
+            camera.getWorldDirection(direction)
+            camera.position.addScaledVector({ x: direction.x, y: 0, z: direction.z }, speed * -1)
+            modelMesh.position.copy(camera.position)
+            modelMesh.updateMatrix()
+            modelMesh.translateX(10)
+            modelMesh.translateY(-5)
+          }
+
+          if (keysPressed['a']) {
+            calRotate(rotateSpeed)
+          }
+
+          if (keysPressed['d']) {
+            calRotate(rotateSpeed * -1)
+          }
+          cameraControl.target.set(modelMesh.position.x, modelMesh.position.y + 3, modelMesh.position.z)
+        })
+        .start()
+    }
   }
 
   //  鬆開按鍵
   function onKeyUp(event) {
     delete keysPressed[event.key]
-    moveHandler()
   }
 
-  //  按下按鍵
-  function onKeyDown(event) {
+  //  按住按鈕
+  function onKeyPress(event) {
     keysPressed[event.key] = true
-    moveHandler()
   }
 
-  // 點光源繞 Y 軸旋轉動畫
-  function pointLightAnimation() {
-    if (rotateAngle > 2 * Math.PI) {
-      rotateAngle = 0 // 超過 360 度後歸零
-    } else {
-      rotateAngle += 0.03 // 遞增角度
+  //  按下按鈕
+  function onKeyDown(event) {
+    if (event.key === ' ') {
+      attack()
     }
-
-    // 光源延橢圓軌道繞 Y 軸旋轉
-    sphereLightMesh.position.x = 8 * Math.cos(rotateAngle)
-    sphereLightMesh.position.z = 4 * Math.sin(rotateAngle)
-
-    // 點光源位置與球體同步
-    pointLight.position.copy(sphereLightMesh.position)
   }
 
   function animations() {
@@ -376,10 +373,13 @@
 
   function render() {
     cameraControl.update() // 需設定 update
+
     animations()
+
     TWEEN.update()
     requestAnimationFrame(render)
 
+    moveHandler()
     renderer.render(scene, camera)
     stats.update()
   }
@@ -396,7 +396,7 @@
   render()
 </script>
 <style>
-  #info {
+  #stats {
     position: absolute;
     top: 10px;
     width: 100%;
