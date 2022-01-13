@@ -78,8 +78,35 @@ function cameraHandler(cameraControl, modelMesh) {
 }
 
 //  控制子彈
-function bulletHandler(bullets) {
+function bulletHandler(THREE, bullets, allCreaper, scene, renderer) {
   bullets.forEach((element) => {
     element.translateX(10)
+    element.updateMatrix()
+    const originPoint = element.position.clone()
+
+    const position = element.geometry.attributes.position
+    const vector = new THREE.Vector3()
+    for (let i = 0, l = position.count; i < l; i++) {
+      vector.fromBufferAttribute(position, i)
+      vector.applyMatrix4(element.matrixWorld)
+      const globalVertex = vector.applyMatrix4(element.matrix)
+      const directionVector = globalVertex.sub(element.position)
+      const ray = new THREE.Raycaster(originPoint, directionVector.clone().normalize())
+      let creeperRes = ray.intersectObjects(allCreaper)
+      if (creeperRes.length > 0 && creeperRes[0].distance < directionVector.length()) {
+        let selectObj = scene.getObjectByProperty('uuid', creeperRes[0].object.parent.uuid)
+        element.geometry.dispose()
+        element.material.dispose()
+        scene.remove(element)
+        creeperRes[0].object.geometry.dispose()
+        // creeperRes[0].object.material.dispose()
+        scene.remove(selectObj)
+        creeperRes.splice(0, 1)
+        console.log(bullets)
+        bullets.splice(bullets.indexOf(bullets.find((bullet) => bullet.id === element.id)), 1)
+        // renderer.renderLists.dispose()
+      }
+    }
   })
+  return bullets
 }

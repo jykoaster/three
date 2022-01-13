@@ -27,21 +27,22 @@
   let cameraControl, stats
   let mixers = []
   let creeperObj
+  let allCreaper = []
   let tween, tweenBack
   let modelMesh
   let keysPressed = {}
   let bullets = []
   const cameraRange = 10 //  模型與相機之間前後的距離
   const cameraHeight = 5 //  模型與相機之間的高度
-  const speed = 5 //  移動速度
+  const speed = 20 //  移動速度
   const rotateSpeed = 0.05 //  旋轉速度
 
   class Creeper {
     constructor() {
       // 宣告頭、身體、腳幾何體大小
-      const headGeo = new THREE.BoxGeometry(4, 4, 4)
-      const bodyGeo = new THREE.BoxGeometry(4, 8, 2)
-      const footGeo = new THREE.BoxGeometry(2, 3, 2)
+      const headGeo = new THREE.BoxGeometry(40, 40, 40)
+      const bodyGeo = new THREE.BoxGeometry(40, 80, 20)
+      const footGeo = new THREE.BoxGeometry(20, 30, 20)
 
       // 苦力怕臉部貼圖
       const headMap = new THREE.TextureLoader().load('../assets/img/creeper_face.png')
@@ -66,7 +67,7 @@
 
       // 頭
       this.head = new THREE.Mesh(headGeo, headMaterials)
-      this.head.position.set(0, 6, 0)
+      this.head.position.set(0, 60, 0)
       this.head.rotation.y = 0.5 // 稍微的擺頭
 
       // 身體
@@ -75,13 +76,13 @@
 
       // 四隻腳
       this.foot1 = new THREE.Mesh(footGeo, skinMat)
-      this.foot1.position.set(-1, -5.5, 2)
+      this.foot1.position.set(-10, -55, 20)
       this.foot2 = this.foot1.clone() // 剩下三隻腳都複製第一隻的 Mesh
-      this.foot2.position.set(-1, -5.5, -2)
+      this.foot2.position.set(-10, -55, -20)
       this.foot3 = this.foot1.clone()
-      this.foot3.position.set(1, -5.5, 2)
+      this.foot3.position.set(10, -55, 20)
       this.foot4 = this.foot1.clone()
-      this.foot4.position.set(1, -5.5, -2)
+      this.foot4.position.set(10, -55, -20)
 
       // 將四隻腳組合為一個 group
       this.feet = new THREE.Group()
@@ -142,7 +143,9 @@
   // 生成苦力怕並加到場景
   function createCreeper() {
     creeperObj = new Creeper()
+    creeperObj.creeper.position.set(THREE.Math.randInt(-500, 500), 100, THREE.Math.randInt(-500, 500))
     scene.add(creeperObj.creeper)
+    allCreaper.push(creeperObj.creeper)
   }
 
   //  生成鳳凰
@@ -202,6 +205,17 @@
     scene.add(points)
   }
 
+  //  發射
+  function attack() {
+    const geometry = new THREE.BoxGeometry(1, 1, 1)
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+    const cube = new THREE.Mesh(geometry, material)
+    cube.position.copy(modelMesh.position)
+    cube.rotation.copy(modelMesh.rotation)
+    scene.add(cube)
+    bullets.push(cube)
+  }
+
   //  創建天空場景
   function createSkybox() {
     let materialArray = []
@@ -255,6 +269,10 @@
     cameraControl.enableDamping = true // 啟用阻尼效果
     cameraControl.dampingFactor = 0.25 // 阻尼系數
 
+    for (let i = 0; i < 50; i++) {
+      createCreeper()
+    }
+
     createSkybox()
     createPhoenix()
     createPoints()
@@ -272,20 +290,10 @@
     document.getElementById('main').appendChild(renderer.domElement)
   }
 
-  function attack() {
-    const geometry = new THREE.BoxGeometry(1, 1, 1)
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-    const cube = new THREE.Mesh(geometry, material)
-    cube.position.copy(modelMesh.position)
-    cube.rotation.copy(modelMesh.rotation)
-    scene.add(cube)
-    bullets.push(cube)
-  }
-
   //  控制移動
   function mainHandler() {
     TWEEN.removeAll()
-    bulletHandler(bullets)
+    bullets = bulletHandler(THREE, bullets, allCreaper, scene, renderer)
     cameraHandler(cameraControl, modelMesh)
     moveHandler(THREE, scene, modelMesh, camera, keysPressed, cameraHeight, cameraRange, speed, rotateSpeed)
   }
